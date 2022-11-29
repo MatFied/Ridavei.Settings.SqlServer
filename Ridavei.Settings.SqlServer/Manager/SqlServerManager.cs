@@ -1,38 +1,44 @@
-﻿using System.Data.SqlClient;
+﻿using System.Data;
+using System.Data.Common;
+using System.Data.SqlClient;
 
 using Ridavei.Settings.Base;
+using Ridavei.Settings.DbAbstractions.Manager;
+using Ridavei.Settings.DbAbstractions.Settings;
 
 using Ridavei.Settings.SqlServer.Settings;
 
 namespace Ridavei.Settings.SqlServer.Manager
 {
-    /// <summary>
-    /// In memory manager class used to retrieve settings using <see cref="SqlServerSettings"/>.
-    /// </summary>
-    internal sealed class SqlServerManager : AManager
+    internal sealed class SqlServerManager : ADbManager
     {
-        private readonly string _connectionString;
-        private readonly SqlCredential _credential;
+        public SqlServerManager(string connectionString) : base(SqlClientFactory.Instance, connectionString) { }
 
-        /// <summary>
-        /// The default constructor for <see cref="SqlServerManager"/> class.
-        /// </summary>
-        public SqlServerManager(string connectionString, SqlCredential credential = null) : base()
+        public SqlServerManager(IDbConnection connection) : base(connection) { }
+
+        /// <inheritdoc/>
+        protected override ADbSettings CreateDbSettings(string dictionaryName, DbProviderFactory dbFactory, string connectionString)
         {
-            _connectionString = connectionString;
-            _credential = credential;
+            return new SqlServerSettings(dictionaryName, dbFactory, connectionString);
         }
 
         /// <inheritdoc/>
-        protected override ASettings CreateSettingsObject(string dictionaryName)
+        protected override ADbSettings CreateDbSettings(string dictionaryName, IDbConnection connection)
         {
-            return new SqlServerSettings(dictionaryName, _connectionString, _credential);
+            return new SqlServerSettings(dictionaryName, connection);
         }
 
         /// <inheritdoc/>
-        protected override bool TryGetSettingsObject(string dictionaryName, out ASettings settings)
+        protected override bool TryGetDbSettingsObject(string dictionaryName, DbProviderFactory dbFactory, string connectionString, out ASettings settings)
         {
-            settings = CreateSettingsObject(dictionaryName);
+            settings = CreateDbSettings(dictionaryName, dbFactory, connectionString);
+            return true;
+        }
+
+        /// <inheritdoc/>
+        protected override bool TryGetDbSettingsObject(string dictionaryName, IDbConnection connection, out ASettings settings)
+        {
+            settings = CreateDbSettings(dictionaryName, connection);
             return true;
         }
     }

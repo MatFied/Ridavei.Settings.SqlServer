@@ -1,79 +1,101 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Data.SqlClient;
+using System.Data;
+using System.Data.Common;
 
-using Ridavei.Settings.Base;
-using Ridavei.Settings.SqlServer.Constants;
+using Ridavei.Settings.DbAbstractions.Settings;
 
 namespace Ridavei.Settings.SqlServer.Settings
 {
-    /// <summary>
-    /// In memory settings class that uses <see cref="Dictionary{TKey, TValue}"/> for storing keys and values.
-    /// </summary>
-    internal sealed class SqlServerSettings : ASettings
+    internal sealed class SqlServerSettings : ADbSettings
     {
-        private static readonly string KeyExistsQuery = $@"
-IF EXISTS (SELECT 1 FROM TABLENAME WHERE [Dictionary] = @{Const.DictionaryParamName} AND [Key] = @{Const.KeyParamName})
-SELECT 1
-ELSE
-SELECT 0";
-        private readonly SqlConnection _connection;
-        private readonly SqlParameter _dictionaryParam;
+        private const string DictionaryParam = "@DictionaryPar";
+        private const string KeyParam = "@KeyPar";
+        private const string ValueParam = "@ValuePar";
+
+        private static readonly string AddOrUpdateValueQuery = $@"
+MERGE [{TableName}] AS trg
+USING (SELECT {DictionaryParam} AS [{DictionaryColumnName}], {KeyParam} AS [{SettingsKeyColumnName}], {ValueParam} AS [{SettingsValueColumnName}]) AS src
+ON (trg.[{DictionaryColumnName}] = src.[{DictionaryColumnName}] AND trg.[{SettingsKeyColumnName}] = src.[{SettingsKeyColumnName}])
+WHEN MATCHED THEN
+UPDATE SET [{SettingsValueColumnName}] = src.[{SettingsValueColumnName}]
+WHEN NOT MATCHED THEN
+INSERT ([{DictionaryColumnName}], [{SettingsKeyColumnName}], [{SettingsValueColumnName}])
+VALUES (src.[{DictionaryColumnName}], src.[{SettingsKeyColumnName}], src.[{SettingsValueColumnName}]);";
+        private static readonly string GetAllValuesFromDbQuery = $"SELECT [{SettingsKeyColumnName}], [{SettingsValueColumnName}] FROM [{TableName}] WHERE [{DictionaryColumnName}] = {DictionaryParam}";
+        private static readonly string GetValueQuery = $"SELECT [{SettingsValueColumnName}] FROM [{TableName}] WHERE [{DictionaryColumnName}] = {DictionaryParam} AND [{SettingsKeyColumnName}] = {KeyParam}";
+
+        public SqlServerSettings(string dictionaryName, DbProviderFactory dbFactory, string connectionString) : base(dictionaryName, dbFactory, connectionString) { }
+
+        public SqlServerSettings(string dictionaryName, IDbConnection connection) : base(dictionaryName, connection) { }
+
+        /// <inheritdoc/>
+        protected override int AddOrUpdateValueInDb(IDbConnection connection, string key, string value)
+        {
+            using (IDbCommand cmd = connection.CreateCommand())
+            {
+                cmd.CommandText = AddOrUpdateValueQuery;
+                cmd.Parameters.Add(CreateParameter(cmd, DictionaryParam, DictionaryName));
+                cmd.Parameters.Add(CreateParameter(cmd, KeyParam, key));
+                cmd.Parameters.Add(CreateParameter(cmd, ValueParam, value));
+
+                return cmd.ExecuteNonQuery();
+            }
+        }
+
+        /// <inheritdoc/>
+        protected override IReadOnlyDictionary<string, string> GetAllValuesFromDb(IDbConnection connection)
+        {
+            Dictionary<string, string> res = new Dictionary<string, string>();
+            using (IDbCommand cmd = connection.CreateCommand())
+            {
+                cmd.CommandText = GetAllValuesFromDbQuery;
+                cmd.Parameters.Add(CreateParameter(cmd, DictionaryParam, DictionaryName));
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    while (reader.Read())
+                        res.Add(reader.GetString(0), reader.IsDBNull(1) ? string.Empty : reader.GetString(1));
+                }
+            }
+
+            return res;
+        }
+
+        /// <inheritdoc/>
+        protected override bool TryGetValueFromDb(IDbConnection connection, string key, out string value)
+        {
+            value = string.Empty;
+            using (IDbCommand cmd = connection.CreateCommand())
+            {
+                cmd.CommandText = GetValueQuery;
+                cmd.Parameters.Add(CreateParameter(cmd, DictionaryParam, DictionaryName));
+                cmd.Parameters.Add(CreateParameter(cmd, KeyParam, key));
+
+                var obj = cmd.ExecuteScalar();
+                if (obj != null && obj != DBNull.Value)
+                {
+                    value = obj.ToString();
+                    return true;
+                }
+                return false;
+            }
+        }
 
         /// <summary>
-        /// The default constructor for <see cref="SqlServerSettings"/> class.
+        /// Creates parameter for the command.
         /// </summary>
-        /// <param name="dictionaryName">Name of the dictionary</param>
-        /// <exception cref="ArgumentNullException">Throwed when the name of the dictionary is null, empty or whitespace.</exception>
-        public SqlServerSettings(string dictionaryName, string connectionString, SqlCredential credential = null) : base(dictionaryName)
+        /// <param name="cmd">Database command</param>
+        /// <param name="parameterName">Name of the parameter</param>
+        /// <param name="value">Value of the parameter</param>
+        /// <returns>Parameter</returns>
+        private static IDbDataParameter CreateParameter(IDbCommand cmd, string parameterName, object value)
         {
-            _connection = new SqlConnection(connectionString, credential);
-            _connection.Open();
+            var res = cmd.CreateParameter();
+            res.ParameterName = parameterName;
+            res.Value = value;
 
-            _dictionaryParam = new SqlParameter(DictionaryParamName, dictionaryName);
-        }
-
-        /// <inheritdoc/>
-        protected override void SetValue(string key, string value)
-        {
-            using (SqlCommand cmd = _connection.CreateCommand())
-            {
-                cmd.CommandText = "";
-
-                cmd.ExecuteNonQuery();
-            }
-        }
-
-        /// <inheritdoc/>
-        protected override bool TryGetValue(string key, out string value)
-        {
-            value = null;
-            return true;
-        }
-
-        /// <inheritdoc/>
-        protected override IReadOnlyDictionary<string, string> GetAllValues()
-        {
-            return null;
-        }
-
-        /// <inheritdoc/>
-        protected override void Dispose(bool disposing)
-        {
-            if (disposing)
-                _connection?.Dispose();
-        }
-
-        private bool CheckIfKeyExists(string key)
-        {
-            using (SqlCommand cmd = _connection.CreateCommand())
-            {
-                cmd.CommandText = KeyExistsQuery;
-                cmd.Parameters.Clear();
-                cmd.Parameters.Add(_dictionaryParam);
-
-                return Convert.ToInt32(cmd.ExecuteScalar()) == 1;
-            }
+            return res;
         }
     }
 }

@@ -13,10 +13,22 @@ namespace Ridavei.Settings.SqlServer
         /// Allows to use <see cref="SqlServerManager"/> as the manager class.
         /// </summary>
         /// <param name="builder">Builder</param>
+		/// <param name="connectionString">Connection string to the database</param>
         /// <returns>Builder</returns>
-        public static SettingsBuilder UseSqlServerManager(this SettingsBuilder builder, string connectionString, SqlCredential credential = null)
+        public static SettingsBuilder UseSqlServerManager(this SettingsBuilder builder, string connectionString)
         {
-            return builder.SetManager(new SqlServerManager(connectionString, credential));
+            return builder.SetManager(new SqlServerManager(connectionString));
+        }
+
+        /// <summary>
+        /// Allows to use <see cref="SqlServerManager"/> as the manager class.
+        /// </summary>
+        /// <param name="builder">Builder</param>
+        /// <param name="connection">Database connection object</param>
+        /// <returns>Builder</returns>
+        public static SettingsBuilder UseSqlServerManager(this SettingsBuilder builder, SqlConnection connection)
+        {
+            return builder.SetManager(new SqlServerManager(connection));
         }
     }
 }

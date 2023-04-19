@@ -34,7 +34,7 @@ namespace Example
 
 ```
 
-### Get and set value in SQL Server using ConnectionString.
+### Get and set value in SQL Server using `SqlConnection`.
 ```csharp
 using System.Data.SqlClient;
 

@@ -15,7 +15,7 @@ namespace Ridavei.Settings.SqlServer.Settings
         const string KeyNamePar = "@KeyNamePar";
         const string ValueNamePar = "@ValuePar";
 
-        private readonly string _addOrUpdateValueQuery = $"EXEC [p_ridaveiSettings_AddOrUpdate] {DictionaryNamePar}, {KeyNamePar}, {ValueNamePar}";
+        private readonly string _addOrUpdateValueQuery = "[dbo].[p_ridaveiSettings_AddOrUpdate]";
         private readonly string _getAllValuesQuery = $"SELECT [KeyName], [Value] FROM f_ridaveiSettings_GetAllValues ({DictionaryNamePar})";
         private readonly string _tryGetValueQuery = $"SELECT dbo.f_ridaveiSettings_GetValue ({DictionaryNamePar}, {KeyNamePar})";
 

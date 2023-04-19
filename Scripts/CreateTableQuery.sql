@@ -1,11 +1,11 @@
-IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'RidaveiSettings')
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = N'dbo' AND TABLE_NAME = N'ridaveiSettings')
 BEGIN
-	CREATE TABLE [RidaveiSettings]
+	CREATE TABLE [dbo].[ridaveiSettings]
 	(
 		[DictionaryName] NVARCHAR(64) NOT NULL,
-		[SettingsKey] NVARCHAR(64) NOT NULL,
-		[SettingsValue] NVARCHAR(1024) NOT NULL,
-		CONSTRAINT PK_RidaveiSettings PRIMARY KEY([DictionaryName], [SettingsKey])
+		[KeyName] NVARCHAR(64) NOT NULL,
+		[Value] NVARCHAR(1024) NOT NULL,
+		CONSTRAINT PK_ridaveiSettings PRIMARY KEY([DictionaryName], [KeyName])
 	)
 END
 GO

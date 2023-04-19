@@ -1,43 +1,42 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Data;
-using System.Data.Common;
 
 using Ridavei.Settings.DbAbstractions.Settings;
 
 namespace Ridavei.Settings.SqlServer.Settings
 {
+    /// <summary>
+    /// SQL Server settings class that uses database table to store settings.
+    /// </summary>
     internal sealed class SqlServerSettings : ADbSettings
     {
-        private const string DictionaryParam = "@DictionaryPar";
-        private const string KeyParam = "@KeyPar";
-        private const string ValueParam = "@ValuePar";
+        const string DictionaryNamePar = "@DictionaryNamePar";
+        const string KeyNamePar = "@KeyNamePar";
+        const string ValueNamePar = "@ValuePar";
 
-        private static readonly string AddOrUpdateValueQuery = $@"
-MERGE [{TableName}] AS trg
-USING (SELECT {DictionaryParam} AS [{DictionaryColumnName}], {KeyParam} AS [{SettingsKeyColumnName}], {ValueParam} AS [{SettingsValueColumnName}]) AS src
-ON (trg.[{DictionaryColumnName}] = src.[{DictionaryColumnName}] AND trg.[{SettingsKeyColumnName}] = src.[{SettingsKeyColumnName}])
-WHEN MATCHED THEN
-UPDATE SET [{SettingsValueColumnName}] = src.[{SettingsValueColumnName}]
-WHEN NOT MATCHED THEN
-INSERT ([{DictionaryColumnName}], [{SettingsKeyColumnName}], [{SettingsValueColumnName}])
-VALUES (src.[{DictionaryColumnName}], src.[{SettingsKeyColumnName}], src.[{SettingsValueColumnName}]);";
-        private static readonly string GetAllValuesFromDbQuery = $"SELECT [{SettingsKeyColumnName}], [{SettingsValueColumnName}] FROM [{TableName}] WHERE [{DictionaryColumnName}] = {DictionaryParam}";
-        private static readonly string GetValueQuery = $"SELECT [{SettingsValueColumnName}] FROM [{TableName}] WHERE [{DictionaryColumnName}] = {DictionaryParam} AND [{SettingsKeyColumnName}] = {KeyParam}";
+        private readonly string _addOrUpdateValueQuery = $"EXEC [p_ridaveiSettings_AddOrUpdate] {DictionaryNamePar}, {KeyNamePar}, {ValueNamePar}";
+        private readonly string _getAllValuesQuery = $"SELECT [KeyName], [Value] FROM f_ridaveiSettings_GetAllValues ({DictionaryNamePar})";
+        private readonly string _tryGetValueQuery = $"SELECT dbo.f_ridaveiSettings_GetValue ({DictionaryNamePar}, {KeyNamePar})";
 
-        public SqlServerSettings(string dictionaryName, DbProviderFactory dbFactory, string connectionString) : base(dictionaryName, dbFactory, connectionString) { }
-
-        public SqlServerSettings(string dictionaryName, IDbConnection connection) : base(dictionaryName, connection) { }
+        /// <summary>
+        /// The default constructor for <see cref="SqlServerSettings"/> class.
+        /// </summary>
+        /// <param name="dictionaryName">Name of the dictionary</param>
+        public SqlServerSettings(string dictionaryName) : base(dictionaryName) { }
 
         /// <inheritdoc/>
         protected override int AddOrUpdateValueInDb(IDbConnection connection, string key, string value)
         {
-            using (IDbCommand cmd = connection.CreateCommand())
+            using (var cmd = connection.CreateCommand())
             {
-                cmd.CommandText = AddOrUpdateValueQuery;
-                cmd.Parameters.Add(CreateParameter(cmd, DictionaryParam, DictionaryName));
-                cmd.Parameters.Add(CreateParameter(cmd, KeyParam, key));
-                cmd.Parameters.Add(CreateParameter(cmd, ValueParam, value));
+                cmd.CommandText = _addOrUpdateValueQuery;
+                cmd.CommandType = CommandType.StoredProcedure;
+
+                cmd.Parameters.Clear();
+                cmd.Parameters.Add(CreateParam(cmd, DictionaryNamePar, DictionaryName));
+                cmd.Parameters.Add(CreateParam(cmd, KeyNamePar, key));
+                cmd.Parameters.Add(CreateParam(cmd, ValueNamePar, value));
 
                 return cmd.ExecuteNonQuery();
             }
@@ -46,17 +45,17 @@ VALUES (src.[{DictionaryColumnName}], src.[{SettingsKeyColumnName}], src.[{Setti
         /// <inheritdoc/>
         protected override IReadOnlyDictionary<string, string> GetAllValuesFromDb(IDbConnection connection)
         {
-            Dictionary<string, string> res = new Dictionary<string, string>();
-            using (IDbCommand cmd = connection.CreateCommand())
+            var res = new Dictionary<string, string>();
+            using (var cmd = connection.CreateCommand())
             {
-                cmd.CommandText = GetAllValuesFromDbQuery;
-                cmd.Parameters.Add(CreateParameter(cmd, DictionaryParam, DictionaryName));
+                cmd.CommandText = _getAllValuesQuery;
+
+                cmd.Parameters.Clear();
+                cmd.Parameters.Add(CreateParam(cmd, DictionaryNamePar, DictionaryName));
 
                 using (var reader = cmd.ExecuteReader())
-                {
                     while (reader.Read())
                         res.Add(reader.GetString(0), reader.IsDBNull(1) ? string.Empty : reader.GetString(1));
-                }
             }
 
             return res;
@@ -66,34 +65,35 @@ VALUES (src.[{DictionaryColumnName}], src.[{SettingsKeyColumnName}], src.[{Setti
         protected override bool TryGetValueFromDb(IDbConnection connection, string key, out string value)
         {
             value = string.Empty;
-            using (IDbCommand cmd = connection.CreateCommand())
+            using (var cmd = connection.CreateCommand())
             {
-                cmd.CommandText = GetValueQuery;
-                cmd.Parameters.Add(CreateParameter(cmd, DictionaryParam, DictionaryName));
-                cmd.Parameters.Add(CreateParameter(cmd, KeyParam, key));
+                cmd.CommandText = _tryGetValueQuery;
+
+                cmd.Parameters.Clear();
+                cmd.Parameters.Add(CreateParam(cmd, DictionaryNamePar, DictionaryName));
+                cmd.Parameters.Add(CreateParam(cmd, KeyNamePar, key));
 
                 var obj = cmd.ExecuteScalar();
-                if (obj != null && obj != DBNull.Value)
-                {
-                    value = obj.ToString();
-                    return true;
-                }
-                return false;
+                if (obj == null || obj == DBNull.Value)
+                    return false;
+
+                value = obj.ToString();
+                return true;
             }
         }
 
         /// <summary>
         /// Creates parameter for the command.
         /// </summary>
-        /// <param name="cmd">Database command</param>
-        /// <param name="parameterName">Name of the parameter</param>
-        /// <param name="value">Value of the parameter</param>
+        /// <param name="command">Database command</param>
+        /// <param name="paramName">Name of the parameter</param>
+        /// <param name="paramValue">Value of the parameter</param>
         /// <returns>Parameter</returns>
-        private static IDbDataParameter CreateParameter(IDbCommand cmd, string parameterName, object value)
+        private IDbDataParameter CreateParam(IDbCommand command, string paramName, string paramValue)
         {
-            var res = cmd.CreateParameter();
-            res.ParameterName = parameterName;
-            res.Value = value;
+            var res = command.CreateParameter();
+            res.ParameterName = paramName;
+            res.Value = paramValue;
 
             return res;
         }

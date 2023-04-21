@@ -3,7 +3,7 @@
 ### Latest release
 [![NuGet Badge Ridavei.Settings.SqlServer](https://buildstats.info/nuget/Ridavei.Settings.SqlServer)](https://www.nuget.org/packages/Ridavei.Settings.SqlServer)
 
-Builder extension to store and retrieve settings keys and values in SQL Server.
+Builder extension to store and retrieve settings keys and values in SQL Server.\
 To work properly it is needed to add the procedures and functions from the [Scripts](https://github.com/MatFied/Ridavei.Settings.SqlServer/tree/main/Scripts) folder.
 
 ## Example of use
